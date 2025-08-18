@@ -10,10 +10,10 @@ android {
 
     defaultConfig {
         applicationId = "com.rogatka.introgram"
-        minSdk = 24
+        minSdk = 26
         targetSdk = 36
-        versionCode = 3
-        versionName = "1.2.1"
+        versionCode = 5
+        versionName = "1.4"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
     }
@@ -51,6 +51,7 @@ dependencies {
     implementation(libs.androidx.material3)
     implementation(libs.androidx.navigation.runtime.ktx)
     implementation(libs.navigation.compose)
+    implementation(libs.ui.graphics)
     testImplementation(libs.junit)
     androidTestImplementation(libs.androidx.junit)
     androidTestImplementation(libs.androidx.espresso.core)
@@ -62,4 +63,5 @@ dependencies {
     implementation("androidx.compose.material3:material3")
     implementation("com.google.code.gson:gson:2.13.1")
     implementation("androidx.compose.material:material-icons-extended:1.7.8")
+    implementation("androidx.compose.foundation:foundation")
 }

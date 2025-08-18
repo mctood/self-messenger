@@ -1,17 +1,14 @@
+@file:OptIn(ExperimentalMaterial3Api::class)
+
 package com.rogatka.introgram.nav
 
 import android.graphics.BitmapFactory
-import android.os.Build
 import android.util.Log
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.PickVisualMediaRequest
 import androidx.activity.result.contract.ActivityResultContracts
-import androidx.annotation.RequiresApi
-import androidx.compose.animation.animateColorAsState
-import androidx.compose.animation.core.tween
-import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.Image
-import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.lazy.LazyColumn
@@ -23,6 +20,7 @@ import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.automirrored.filled.Send
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Edit
+import androidx.compose.material.icons.filled.Folder
 import androidx.compose.material.icons.filled.LocalFlorist
 import androidx.compose.material.icons.filled.Menu
 import androidx.compose.material.icons.filled.Photo
@@ -38,76 +36,61 @@ import androidx.compose.runtime.setValue
 import androidx.compose.runtime.toMutableStateList
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.clip
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
-import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.ImageBitmap
 import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.graphics.painter.BitmapPainter
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalSoftwareKeyboardController
-import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
-import androidx.compose.ui.unit.sp
 import androidx.navigation.NavController
+import com.rogatka.introgram.modals.MoveToFolderModal
 import com.rogatka.introgram.ChatAvatar
+import com.rogatka.introgram.ChatTypes
 import com.rogatka.introgram.Message
+import com.rogatka.introgram.MessageBox
+import com.rogatka.introgram.SystemMessageBox
+import com.rogatka.introgram.TodoItemBox
 import com.rogatka.introgram.changeChatBackground
 import com.rogatka.introgram.changeChatPhoto
+import com.rogatka.introgram.checkMessageInTodoChat
+import com.rogatka.introgram.currentDateToString
+import com.rogatka.introgram.dateMessage
+import com.rogatka.introgram.datesDifferent
 import com.rogatka.introgram.deleteChat
 import com.rogatka.introgram.deleteImageFile
+import com.rogatka.introgram.editMessage
 import com.rogatka.introgram.getAllChatMessages
 import com.rogatka.introgram.getChatByID
 import com.rogatka.introgram.loadBitmapFromFile
 import com.rogatka.introgram.modals.ConfirmChatDeleteModal
 import com.rogatka.introgram.modals.EditChatNameModal
+import com.rogatka.introgram.modals.EditMessageModal
+import com.rogatka.introgram.moveChatToFolder
 import com.rogatka.introgram.newMessage
 import com.rogatka.introgram.randomUID
+import com.rogatka.introgram.removeMessage
 import com.rogatka.introgram.renameChat
 import com.rogatka.introgram.resizeToCover
 import com.rogatka.introgram.saveBitmapToFile
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
-import java.time.LocalDateTime
 
 
 @Composable
-fun MessageBox(text: String, modifier: Modifier = Modifier) {
-    Surface(
-        shape = RoundedCornerShape(8.dp, 8.dp, 3.dp, 8.dp), // Радиус скругления
-        color = MaterialTheme.colorScheme.surfaceContainer, // Цвет фона
-        modifier = modifier.padding(bottom = 8.dp)
-    ) {
-        Column(
-            modifier = Modifier.padding(12.dp, 12.dp, 12.dp, 4.dp),
-            horizontalAlignment = Alignment.End
-        ) {
-            Box {
-                Text(text = text)
-            }
-            Box {
-                Text("00:00", fontWeight = FontWeight.Thin, fontSize = 12.sp)
-            }
-        }
-    }
-
-}
-
-
-@OptIn(ExperimentalMaterial3Api::class, ExperimentalFoundationApi::class)
-@RequiresApi(Build.VERSION_CODES.O)
-@Composable
-fun ChatScreen(chatId: Int, navController: NavController) {
+fun ChatScreen(chatId: Int, navController: NavController, folderToReturn: Int = 0) {
     val context = LocalContext.current
     val chat = getChatByID(context = context, id = chatId)
+
     if (chat == null) {
-        navController.navigate("main")
+        navController.navigate("main/0")
         return
     }
+    var chatName by remember {mutableStateOf(chat.name)}
     val messages = remember {
         getAllChatMessages(context = context, chatId = chatId)?.toMutableStateList()
             ?: mutableStateListOf()
@@ -121,6 +104,7 @@ fun ChatScreen(chatId: Int, navController: NavController) {
 
     var avatarLoading by remember { mutableStateOf(false) }
     var bgLoading by remember { mutableStateOf(false) }
+    var messageToEdit by remember { mutableStateOf<Message?>(null) }
 
     val coroutineScope = rememberCoroutineScope()
     val imageBitmap = loadBitmapFromFile(
@@ -209,6 +193,8 @@ fun ChatScreen(chatId: Int, navController: NavController) {
 
     var showConfirmDeleteDialog by remember { mutableStateOf(false) }
     var showEditNameDialog by remember { mutableStateOf(false) }
+    var showMoveToFolderDialog by remember { mutableStateOf(false) }
+    var showMessageEditDialog by remember { mutableStateOf(false) }
 
     ConfirmChatDeleteModal(
         show = showConfirmDeleteDialog,
@@ -223,9 +209,33 @@ fun ChatScreen(chatId: Int, navController: NavController) {
         onDismiss = { showEditNameDialog = false },
         chat = chat,
         onConfirm = { newChatName ->
+            chatName = newChatName
             renameChat(context, newChatName, chat)
             showEditNameDialog = false
-            navController.navigate("chat/${chatId}")
+        })
+
+    MoveToFolderModal(
+        show = showMoveToFolderDialog,
+        onDismiss = { showMoveToFolderDialog = false },
+        onConfirm = { folder ->
+            moveChatToFolder(context, chat, folder)
+            showMoveToFolderDialog = false
+            navController.navigate("main/${folder?.id ?: 0}")
+        })
+
+    EditMessageModal(
+        show = showMessageEditDialog,
+        onDismiss = {
+            showMessageEditDialog = false
+            messageToEdit = null
+        },
+        message = messageToEdit,
+        onConfirm = { message ->
+            val messageIndex = messages.indexOfFirst { it.id == message.id }
+            messages[messageIndex].content = message.content
+            editMessage(context, chat, message, message.content)
+            showMessageEditDialog = false
+            messageToEdit = null
         })
 
     /** END MODALS **/
@@ -234,14 +244,16 @@ fun ChatScreen(chatId: Int, navController: NavController) {
 
     LaunchedEffect(messages.size) {
         if (messages.isNotEmpty()) {
-            listState.animateScrollToItem(0)
+            coroutineScope.launch {
+                listState.animateScrollToItem(0)
+            }
         }
     }
 
 
     fun sendMessage() {
         val messageModel = Message(
-            id = randomUID(), content = messageText, time = LocalDateTime.now()
+            id = randomUID(), content = messageText, dateTime = currentDateToString()
         )
         newMessage(
             context = context, chat = chat, message = messageModel
@@ -249,7 +261,16 @@ fun ChatScreen(chatId: Int, navController: NavController) {
         messageText = ""
         focusRequester.requestFocus()
         keyboardController?.show()
+        if (messages.isEmpty() || datesDifferent(messages[0], messageModel)) {
+            messages.add(0, dateMessage(messageModel))
+        }
         messages.add(0, messageModel)
+    }
+
+    fun deleteMessage(id: Int) {
+        val messageIndex = messages.indexOfFirst { it.id == id }
+        removeMessage(context, chat, messages[messageIndex])
+        messages.removeAt(messageIndex)
     }
 
     Scaffold(
@@ -263,9 +284,9 @@ fun ChatScreen(chatId: Int, navController: NavController) {
                     Row(
                         verticalAlignment = Alignment.CenterVertically
                     ) {
-                        ChatAvatar(imagePath.value, 36.dp, loading = avatarLoading)
+                        ChatAvatar(imagePath.value, size = 36.dp, loading = avatarLoading, todo = chat.type == ChatTypes.TODO)
                         Text(
-                            chat.name,
+                            chatName,
                             maxLines = 1,
                             overflow = TextOverflow.Ellipsis,
                             modifier = Modifier.padding(12.dp)
@@ -274,7 +295,7 @@ fun ChatScreen(chatId: Int, navController: NavController) {
 
                 },
                 navigationIcon = {
-                    IconButton(onClick = { navController.navigate("main") }) {
+                    IconButton(onClick = { navController.navigate("main/${folderToReturn}") }) {
                         Icon(
                             imageVector = Icons.AutoMirrored.Filled.ArrowBack,
                             contentDescription = "Back"
@@ -324,6 +345,19 @@ fun ChatScreen(chatId: Int, navController: NavController) {
                                 pickBackground.launch(PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageOnly))
                             },
                         )
+                        DropdownMenuItem(
+                            text = { Text("Выбрать папку") },
+                            leadingIcon = {
+                                Icon(
+                                    Icons.Default.Folder,
+                                    contentDescription = "Выбрать папку"
+                                )
+                            },
+                            onClick = {
+                                expanded = false
+                                showMoveToFolderDialog = true
+                            },
+                        )
                         HorizontalDivider()
                         DropdownMenuItem(text = { Text("Удалить чат") }, leadingIcon = {
                             Icon(
@@ -341,9 +375,7 @@ fun ChatScreen(chatId: Int, navController: NavController) {
             BottomAppBar(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .heightIn(min = 48.dp)
                     .imePadding()
-                    .clip(RoundedCornerShape(16.dp, 16.dp, 0.dp, 0.dp))
                     .navigationBarsPadding(),
                 tonalElevation = 8.dp,
                 contentPadding = PaddingValues(horizontal = 12.dp, vertical = 8.dp),
@@ -357,9 +389,8 @@ fun ChatScreen(chatId: Int, navController: NavController) {
                         .weight(1f)
                         .padding(end = 8.dp)
                         .focusRequester(focusRequester),
-                    placeholder = { Text("Введите сообщение...") },
+                    placeholder = { Text(if (chat.type == ChatTypes.CLASSIC) "Введите сообщение..."  else "Что нужно сделать?") },
                     singleLine = false,
-                    maxLines = 10,
                     shape = RoundedCornerShape(16.dp),
                     colors = TextFieldDefaults.colors(
                         focusedContainerColor = MaterialTheme.colorScheme.surface,
@@ -401,38 +432,60 @@ fun ChatScreen(chatId: Int, navController: NavController) {
                     contentScale = ContentScale.Crop,
                     modifier = Modifier
                         .fillMaxSize()
-//                        .drawWithCache {
-//                            // Оптимизация рендеринга
-//                            onDrawWithContent {
-//                                drawRect(Color(0x33000000)) // Затемнение
-//                                drawImage(imageBitmap )
-//                            }
-//                        }
                 )
 
-                LazyColumn(
+                if (chat.type == ChatTypes.CLASSIC)
+                    LazyColumn(
+                        modifier = Modifier
+                            .fillMaxSize()
+                            .padding(horizontal = 16.dp),
+                        verticalArrangement = Arrangement.Bottom,
+                        horizontalAlignment = Alignment.End,
+                        reverseLayout = true,
+                    ) {
+                        items(messages) { message: Message ->
+                            if (message.isSystem)
+                                SystemMessageBox(message.content)
+                            else MessageBox(
+                                text = message.content,
+                                time = message.time(),
+                                onDelete = { deleteMessage(id = message.id) },
+                                onEdit = {
+                                    messageToEdit = message
+                                    showMessageEditDialog = true
+                                }
+                            )
+                        }
+                    }
+
+                if (chat.type == ChatTypes.TODO) LazyColumn(
                     modifier = Modifier
                         .fillMaxSize()
-                        .padding(horizontal = 16.dp),
+                        .padding(horizontal = 12.dp),
                     verticalArrangement = Arrangement.Bottom,
-                    horizontalAlignment = Alignment.End,
+                    horizontalAlignment = Alignment.Start,
                     reverseLayout = true,
                 ) {
                     items(messages) { message: Message ->
-                        MessageBox(
+                        TodoItemBox(
+                            checked = message.done,
                             text = message.content,
-                            modifier = Modifier.animateItemPlacement()
+                            modifier = Modifier
+                                .clickable {
+                                    val index = messages.indexOfFirst { it.id == message.id }
+                                    messages[index] = message.copy(done = !message.done)
+                                    checkMessageInTodoChat(
+                                        context,
+                                        chat,
+                                        message,
+                                        !message.done
+                                    )
+                                }
                         )
                     }
                 }
             }
-
         }
-    }
-
-    LaunchedEffect(Unit) {
-        focusRequester.requestFocus()
-        keyboardController?.show()
     }
 }
 
