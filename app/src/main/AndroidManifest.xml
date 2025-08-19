@@ -13,12 +13,14 @@
         android:supportsRtl="true"
         android:theme="@style/Theme.MyApplication"
         android:hardwareAccelerated="true">
+
         <activity
             android:name=".MainActivity"
             android:exported="true"
             android:theme="@style/Theme.MyApplication"
             android:windowSoftInputMode="adjustResize"
             android:fitsSystemWindows="true">
+
             <intent-filter>
                 <action android:name="android.intent.action.MAIN" />
 

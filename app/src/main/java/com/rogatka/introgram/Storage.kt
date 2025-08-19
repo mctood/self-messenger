@@ -258,6 +258,7 @@ fun changeChatPhoto(context: Context, chat: Chat?, imagePath: String) {
         Chats::class.java
     )
     val chatIndex = chats.chats.indexOfFirst { it.id == chat.id }
+    deleteImageFile(context, chats.chats[chatIndex].imagePath)
     chats.chats[chatIndex].imagePath = imagePath
     writeJsonToFile(context, "chats.json", gson.toJson(chats))
 }
@@ -269,6 +270,7 @@ fun changeChatBackground(context: Context, chat: Chat?, backgroundPath: String) 
         Chats::class.java
     )
     val chatIndex = chats.chats.indexOfFirst { it.id == chat.id }
+    deleteImageFile(context, chats.chats[chatIndex].backgroundPath)
     chats.chats[chatIndex].backgroundPath = backgroundPath
     writeJsonToFile(context, "chats.json", gson.toJson(chats))
 }
@@ -368,6 +370,10 @@ fun removeMessage(context: Context, chat: Chat, message: Message) {
     val messageIndex = chats.chats[chatIndex].messages.indexOfFirst { it.id == message.id }
 
     chats.chats[chatIndex].messages.removeAt(messageIndex)
+    if (chats.chats[chatIndex].messages.first().isSystem) {
+        chats.chats[chatIndex].messages.removeAt(0)
+    }
+
     writeJsonToFile(context, "chats.json", gson.toJson(chats))
 }
 
@@ -382,4 +388,25 @@ fun editMessage(context: Context, chat: Chat, message: Message, text: String) {
 
     chats.chats[chatIndex].messages[messageIndex].content = text
     writeJsonToFile(context, "chats.json", gson.toJson(chats))
+}
+
+data class Stats(
+    val total: Int,
+    val done: Int,
+)
+fun countStats(context: Context): Stats {
+    var total = 0
+    var done = 0
+
+    val chats = getAllChats(context)
+    chats.filter { it.type == ChatTypes.TODO }.forEach { chat ->
+        val totalMessages = chat.messages.filter {!it.isSystem}
+        total += totalMessages.size
+        done += totalMessages.filter { it.done }.size
+    }
+
+    return Stats(
+        total = total,
+        done = done
+    )
 }

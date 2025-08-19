@@ -5,6 +5,7 @@ import androidx.compose.animation.core.tween
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.gestures.detectDragGestures
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.layout.Arrangement
@@ -17,6 +18,7 @@ import androidx.compose.material.icons.filled.Checklist
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material.icons.filled.Folder
+import androidx.compose.material.icons.filled.Info
 import androidx.compose.material.icons.filled.Menu
 import androidx.compose.material.icons.filled.Search
 import androidx.compose.material3.*
@@ -31,6 +33,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
@@ -45,15 +48,19 @@ import com.rogatka.introgram.ChatTypes
 import com.rogatka.introgram.Folder
 import com.rogatka.introgram.Message
 import com.rogatka.introgram.SharedContentHolder
+import com.rogatka.introgram.TaskStats
 import com.rogatka.introgram.addFolder
+import com.rogatka.introgram.countStats
 import com.rogatka.introgram.currentDateToString
 import com.rogatka.introgram.deleteFolder
 import com.rogatka.introgram.getAllChatMessages
 import com.rogatka.introgram.getAllChats
 import com.rogatka.introgram.getAllFolders
+import com.rogatka.introgram.modals.AboutModal
 import com.rogatka.introgram.moveChatToFolder
 import com.rogatka.introgram.newMessage
 import com.rogatka.introgram.randomUID
+import com.rogatka.introgram.topBarColors
 
 
 @Composable
@@ -94,13 +101,19 @@ fun TopBarFolder(
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun MainScreen(navController: NavController, folderId: Int = 0) {
+fun MainScreen(navController: NavController, folder: Int = 0) {
     val sharedText = SharedContentHolder.sharedText
     var shareMode by remember { mutableStateOf(sharedText != null) }
     val context = LocalContext.current
     val scrollBehavior = TopAppBarDefaults.pinnedScrollBehavior(rememberTopAppBarState())
     val folders: List<Folder> = remember { getAllFolders(context) }
-    var folderId by rememberSaveable { mutableIntStateOf(folderId) }
+    val allFolderIds = remember {
+        listOf(-1, 0) + folders.map { it.id }
+    }
+    var folderIndex by rememberSaveable {
+        mutableIntStateOf(allFolderIds.indexOf(folder))
+    }
+    var folderId by rememberSaveable { mutableIntStateOf(folder) }
     val chats: List<Chat> = remember(folderId) {
         if (folderId == -1) {
             getAllChats(context).filter { it.type == ChatTypes.TODO }
@@ -111,6 +124,7 @@ fun MainScreen(navController: NavController, folderId: Int = 0) {
     var expanded by remember { mutableStateOf(false) }
     var showNewFolderDialog by remember { mutableStateOf(false) }
     var showDeleteFolderDialog by remember { mutableStateOf(false) }
+    var showAboutModal by remember { mutableStateOf(false) }
 
     /** MODALS **/
 
@@ -140,26 +154,51 @@ fun MainScreen(navController: NavController, folderId: Int = 0) {
             navController.navigate("main/${newFolder.id}")
         })
 
+    AboutModal(
+        show = showAboutModal,
+        onConfirm = { showAboutModal = false }
+    )
+
     /** END MODALS **/
 
-
+    var totalDragX = 0f
     Scaffold(
+        modifier = Modifier
+            .pointerInput(Unit) {
+                detectDragGestures(
+                    onDragEnd = {
+                        if (totalDragX > 100) {
+                            if (folderIndex > 0) {
+                                folderIndex--
+                                folderId = allFolderIds[folderIndex]
+                            }
+                        } else if (totalDragX < -100) {
+                            if (folderIndex < allFolderIds.lastIndex) {
+                                folderIndex++
+                                folderId = allFolderIds[folderIndex]
+                            }
+                        }
+                        totalDragX = 0f
+                    },
+                    onDrag = { change, dragAmount ->
+                        totalDragX += dragAmount.x
+                        change.consume()
+                    }
+                )
+            },
         floatingActionButton = {
             FloatingActionButton(
                 onClick = {
                     navController.navigate("details/${folderId}")
                 },
                 content = {Icon(Icons.Default.Edit, contentDescription = "Edit")},
-                modifier = Modifier.padding(16.dp)
+                modifier = Modifier.padding(8.dp)
             )
         },
         topBar = {
             Column(modifier = Modifier.fillMaxWidth()) {
                 CenterAlignedTopAppBar(
-                    colors = TopAppBarDefaults.topAppBarColors(
-                        containerColor = MaterialTheme.colorScheme.primaryContainer,
-                        titleContentColor = MaterialTheme.colorScheme.primary,
-                    ),
+                    colors = topBarColors(),
                     title = {
                         Text(
                             if (shareMode) "Куда переслать?" else "Чаты",
@@ -184,14 +223,24 @@ fun MainScreen(navController: NavController, folderId: Int = 0) {
                                 expanded = false
                                 showNewFolderDialog = true
                             })
-                            if (folderId != 0)
-                            DropdownMenuItem(text = { Text("Удалить папку") }, leadingIcon = {
+                            if (folderId > 0)
+                                DropdownMenuItem(text = { Text("Удалить папку") }, leadingIcon = {
+                                    Icon(
+                                        Icons.Default.Delete, contentDescription = "Удалить папку"
+                                    )
+                                }, onClick = {
+                                    expanded = false
+                                    showDeleteFolderDialog = true
+                                })
+
+                            HorizontalDivider()
+                            DropdownMenuItem(text = { Text("О программе") }, leadingIcon = {
                                 Icon(
-                                    Icons.Default.Delete, contentDescription = "Удалить папку"
+                                    Icons.Default.Info, contentDescription = "О программе"
                                 )
                             }, onClick = {
                                 expanded = false
-                                showDeleteFolderDialog = true
+                                showAboutModal = true
                             })
                         }
                     },
@@ -209,18 +258,20 @@ fun MainScreen(navController: NavController, folderId: Int = 0) {
                     modifier = Modifier
                         .fillMaxWidth()
                         .horizontalScroll(rememberScrollState())
-                        .background(MaterialTheme.colorScheme.primaryContainer)
+                        .background(topBarColors().containerColor)
                 ) {
 
 
                     TopBarFolder(selected = folderId ==  -1, color = Color(0x22FFFFFF), onClick = {
                         folderId = -1
+                        folderIndex = allFolderIds.indexOf(folderId)
                     }) {
                         Icon(Icons.Filled.Checklist, contentDescription = "1", modifier = Modifier.size(24.dp))
                     }
 
                     TopBarFolder(selected = folderId ==  0, onClick = {
                         folderId = 0
+                        folderIndex = allFolderIds.indexOf(folderId)
                     }) {
                         Icon(Icons.AutoMirrored.Filled.Chat, contentDescription = "1", modifier = Modifier.size(16.dp))
                         Text("Все чаты", modifier = Modifier.padding(start = 12.dp))
@@ -229,6 +280,7 @@ fun MainScreen(navController: NavController, folderId: Int = 0) {
                     folders.forEach { folder ->
                         TopBarFolder(selected = folderId == folder.id, onClick = {
                             folderId = folder.id
+                            folderIndex = allFolderIds.indexOf(folder.id)
                         }) {
                             Icon(folder.icon.icon, contentDescription = "Folder Icon", modifier = Modifier.size(16.dp))
                             Text(folder.name, modifier = Modifier.padding(start = 12.dp))
@@ -242,8 +294,6 @@ fun MainScreen(navController: NavController, folderId: Int = 0) {
                     )
                 }
             }
-
-
         }
     ) { padding ->
 
@@ -277,6 +327,12 @@ fun MainScreen(navController: NavController, folderId: Int = 0) {
                 .verticalScroll(rememberScrollState())
                 .padding(top = 8.dp),
         ) {
+            if (folderId == -1) {
+                val stats = countStats(context)
+                TaskStats(stats.done, stats.total)
+            }
+
+
             chats.forEach { chat ->
                 val allMessages = getAllChatMessages(context, chat.id)
 

@@ -9,6 +9,9 @@ import androidx.activity.result.PickVisualMediaRequest
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.combinedClickable
+import androidx.compose.foundation.gestures.detectDragGestures
+import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.lazy.LazyColumn
@@ -24,6 +27,7 @@ import androidx.compose.material.icons.filled.Folder
 import androidx.compose.material.icons.filled.LocalFlorist
 import androidx.compose.material.icons.filled.Menu
 import androidx.compose.material.icons.filled.Photo
+import androidx.compose.material.ripple.rememberRipple
 import androidx.compose.material3.*
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
@@ -38,18 +42,22 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.ImageBitmap
 import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.graphics.painter.BitmapPainter
+import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalSoftwareKeyboardController
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.zIndex
 import androidx.navigation.NavController
 import com.rogatka.introgram.modals.MoveToFolderModal
 import com.rogatka.introgram.ChatAvatar
 import com.rogatka.introgram.ChatTypes
+import com.rogatka.introgram.ExpandingBottomBar
 import com.rogatka.introgram.Message
 import com.rogatka.introgram.MessageBox
 import com.rogatka.introgram.SystemMessageBox
@@ -76,6 +84,7 @@ import com.rogatka.introgram.removeMessage
 import com.rogatka.introgram.renameChat
 import com.rogatka.introgram.resizeToCover
 import com.rogatka.introgram.saveBitmapToFile
+import com.rogatka.introgram.topBarColors
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
@@ -271,15 +280,16 @@ fun ChatScreen(chatId: Int, navController: NavController, folderToReturn: Int = 
         val messageIndex = messages.indexOfFirst { it.id == id }
         removeMessage(context, chat, messages[messageIndex])
         messages.removeAt(messageIndex)
+        if (messages.first().isSystem) {
+            messages.removeAt(0)
+        }
     }
 
+    var totalDragX = 0f
     Scaffold(
         topBar = {
             TopAppBar(
-                colors = TopAppBarDefaults.topAppBarColors(
-                    containerColor = MaterialTheme.colorScheme.primaryContainer,
-                    titleContentColor = MaterialTheme.colorScheme.primary,
-                ),
+                colors = topBarColors(),
                 title = {
                     Row(
                         verticalAlignment = Alignment.CenterVertically
@@ -372,14 +382,11 @@ fun ChatScreen(chatId: Int, navController: NavController, folderToReturn: Int = 
             )
         },
         bottomBar = {
-            BottomAppBar(
+            ExpandingBottomBar(
                 modifier = Modifier
                     .fillMaxWidth()
                     .imePadding()
-                    .navigationBarsPadding(),
-                tonalElevation = 8.dp,
-                contentPadding = PaddingValues(horizontal = 12.dp, vertical = 8.dp),
-
+                    .navigationBarsPadding()
                 ) {
                 // Поле ввода сообщения
                 OutlinedTextField(
@@ -391,15 +398,20 @@ fun ChatScreen(chatId: Int, navController: NavController, folderToReturn: Int = 
                         .focusRequester(focusRequester),
                     placeholder = { Text(if (chat.type == ChatTypes.CLASSIC) "Введите сообщение..."  else "Что нужно сделать?") },
                     singleLine = false,
-                    shape = RoundedCornerShape(16.dp),
+                    maxLines = 4,
+                    shape = RoundedCornerShape(24.dp),
                     colors = TextFieldDefaults.colors(
                         focusedContainerColor = MaterialTheme.colorScheme.surface,
-                        unfocusedContainerColor = MaterialTheme.colorScheme.surface
+                        unfocusedContainerColor = MaterialTheme.colorScheme.surface,
+                        focusedIndicatorColor = Color.Transparent,
+                        unfocusedIndicatorColor = Color.Transparent,
+                        disabledIndicatorColor = Color.Transparent,
                     ),
                 )
 
                 // Кнопка отправки
                 IconButton(
+                    modifier = Modifier.size(32.dp),
                     onClick = {
                         if (messageText.isNotBlank()) {
                             sendMessage()
@@ -426,6 +438,7 @@ fun ChatScreen(chatId: Int, navController: NavController, folderToReturn: Int = 
                 modifier = Modifier
                     .fillMaxSize()
             ) {
+
                 Image(
                     painter = BitmapPainter(imageBitmap),
                     contentDescription = null,
@@ -467,23 +480,31 @@ fun ChatScreen(chatId: Int, navController: NavController, folderToReturn: Int = 
                     reverseLayout = true,
                 ) {
                     items(messages) { message: Message ->
-                        TodoItemBox(
+                        if (message.isSystem)
+                            SystemMessageBox(message.content)
+                        else TodoItemBox(
                             checked = message.done,
                             text = message.content,
-                            modifier = Modifier
-                                .clickable {
-                                    val index = messages.indexOfFirst { it.id == message.id }
-                                    messages[index] = message.copy(done = !message.done)
-                                    checkMessageInTodoChat(
-                                        context,
-                                        chat,
-                                        message,
-                                        !message.done
-                                    )
-                                }
+                            onDelete = { deleteMessage(id = message.id) },
+                            onEdit = {
+                                messageToEdit = message
+                                showMessageEditDialog = true
+                            },
+                            onTap = {
+                                val index = messages.indexOfFirst { it.id == message.id }
+                                messages[index] = message.copy(done = !message.done)
+                                checkMessageInTodoChat(
+                                    context,
+                                    chat,
+                                    message,
+                                    !message.done
+                                )
+                            },
                         )
                     }
                 }
+
+
             }
         }
     }

@@ -8,10 +8,15 @@ import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
 import androidx.compose.animation.AnimatedContentTransitionScope
 import androidx.compose.animation.core.tween
+import androidx.compose.foundation.background
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.ScaffoldDefaults
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
+import androidx.compose.ui.Modifier
 import androidx.navigation.NavType
 import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
@@ -39,53 +44,54 @@ class MainActivity : ComponentActivity() {
             MyApplicationTheme {
                 ScaffoldDefaults.contentWindowInsets
                 val navController = rememberNavController()
-                NavHost(
-                    navController = navController,
-                    startDestination = "main/0",  // Стартовый экран
-                ) {
-                    composable(
-                        "main/{folder}",
-                        arguments = listOf(navArgument("folder") { type = NavType.IntType })
-                    ) { backStackEntry ->
-                        val folder = backStackEntry.arguments?.getInt("folder") ?: 0
-                        MainScreen(navController, folder)
-                    }
+
+                Box(Modifier.fillMaxSize().background(MaterialTheme.colorScheme.background)) {
+                    NavHost(
+                        navController = navController,
+                        startDestination = "main/0",  // Стартовый экран
+                    ) {
+                        composable(
+                            "main/{folder}",
+                            arguments = listOf(navArgument("folder") { type = NavType.IntType })
+                        ) { backStackEntry ->
+                            val folder = backStackEntry.arguments?.getInt("folder") ?: 0
+                            MainScreen(navController, folder)
+                        }
 
 
-                    composable(
-                        "details/{folder}",
-                        arguments = listOf(navArgument("folder") { type = NavType.IntType })
-                    ) { backStackEntry ->
-                        val folder = backStackEntry.arguments?.getInt("folder") ?: 0
-                        DetailsScreen(navController, folder)
-                    }
+                        composable(
+                            "details/{folder}",
+                            arguments = listOf(navArgument("folder") { type = NavType.IntType })
+                        ) { backStackEntry ->
+                            val folder = backStackEntry.arguments?.getInt("folder") ?: 0
+                            DetailsScreen(navController, folder)
+                        }
 
 
-                    composable(
-                        "chat/{id}/{folder}",
-                        enterTransition = {
-                            slideIntoContainer(
-                                AnimatedContentTransitionScope.SlideDirection.Left,
-                                animationSpec = tween(400)
+                        composable(
+                            "chat/{id}/{folder}",
+                            enterTransition = {
+                                slideIntoContainer(
+                                    AnimatedContentTransitionScope.SlideDirection.Left,
+                                    animationSpec = tween(400)
+                                )
+                            },
+                            exitTransition = {
+                                slideOutOfContainer(
+                                    AnimatedContentTransitionScope.SlideDirection.Right,
+                                    animationSpec = tween(400)
+                                )
+                            },
+                            arguments = listOf(
+                                navArgument("id") { type = NavType.IntType },
+                                navArgument("folder") { type = NavType.IntType }
                             )
-                        },
-                        exitTransition = {
-                            slideOutOfContainer(
-                                AnimatedContentTransitionScope.SlideDirection.Right,
-                                animationSpec = tween(400)
-                            )
-                        },
-                        arguments = listOf(
-                            navArgument("id") { type = NavType.IntType },
-                            navArgument("folder") { type = NavType.IntType }
-                        )
-                    ) { backStackEntry ->
-                        val id = backStackEntry.arguments?.getInt("id") ?: 0
-                        val folder = backStackEntry.arguments?.getInt("folder") ?: 0
-                        ChatScreen(id, navController, folder)
+                        ) { backStackEntry ->
+                            val id = backStackEntry.arguments?.getInt("id") ?: 0
+                            val folder = backStackEntry.arguments?.getInt("folder") ?: 0
+                            ChatScreen(id, navController, folder)
+                        }
                     }
-
-
                 }
             }
         }

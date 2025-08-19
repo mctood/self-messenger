@@ -39,6 +39,7 @@ import com.rogatka.introgram.deleteImageFile
 import com.rogatka.introgram.getAllFolders
 import com.rogatka.introgram.resizeToCover
 import com.rogatka.introgram.saveBitmapToFile
+import com.rogatka.introgram.topBarColors
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
@@ -102,10 +103,7 @@ fun DetailsScreen(navController: NavController, folderId: Int = 0) {
     Scaffold(
         topBar = {
             TopAppBar(
-                colors = TopAppBarDefaults.topAppBarColors(
-                    containerColor = MaterialTheme.colorScheme.primaryContainer,
-                    titleContentColor = MaterialTheme.colorScheme.primary,
-                ),
+                colors = topBarColors(),
                 title = {
                     Text(
                         "Добавить чат",

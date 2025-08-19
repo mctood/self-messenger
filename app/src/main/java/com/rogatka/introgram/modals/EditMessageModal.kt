@@ -43,6 +43,7 @@ fun EditMessageModal(
                         .fillMaxWidth()
                         .heightIn(min = 100.dp),
                     placeholder = { Text("Введите текст...") },
+                    minLines = 1,
                     maxLines = 20,
                     colors = TextFieldDefaults.colors(
                         focusedContainerColor = MaterialTheme.colorScheme.surfaceVariant,

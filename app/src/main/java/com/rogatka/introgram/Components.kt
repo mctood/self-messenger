@@ -8,11 +8,14 @@ import androidx.compose.animation.animateColorAsState
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
+import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.gestures.detectTapGestures
+import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.RowScope
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -20,6 +23,7 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.wrapContentHeight
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
@@ -32,10 +36,14 @@ import androidx.compose.material.icons.outlined.CheckBox
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
+import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
+import androidx.compose.material3.TopAppBarColors
+import androidx.compose.material3.TopAppBarDefaults
+import androidx.compose.material3.ripple
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -66,7 +74,7 @@ fun TodoBadge(modifier: Modifier = Modifier) {
         contentAlignment = Alignment.Center
     ) {
         Icon(
-            imageVector = Icons.Default.Checklist, // Или другая иконка для TODO
+            imageVector = Icons.Default.Checklist,
             contentDescription = "Тип чата: Список дел",
             tint = MaterialTheme.colorScheme.onPrimary, // Цвет иконки
             modifier = Modifier.size(12.dp) // Размер иконки внутри значка
@@ -122,6 +130,53 @@ fun ChatAvatar(
 
 }
 
+@Composable
+fun MessageMenu(
+    initialShow: Boolean,
+    onDismiss: () -> Unit,
+    onDelete: () -> Unit,
+    onEdit: () -> Unit,
+    text: String,
+    context: Context
+) {
+    DropdownMenu(
+        expanded = initialShow,
+        onDismissRequest = onDismiss,
+        modifier = Modifier.background(MaterialTheme.colorScheme.surface)
+    ) {
+        DropdownMenuItem(
+            text = { Text("Копировать текст") },
+            onClick = {
+                onDismiss()
+                context.copyToClipboard(text)
+            },
+            leadingIcon = {
+                Icon(Icons.Default.ContentCopy, null)
+            }
+        )
+        DropdownMenuItem(
+            text = { Text("Изменить") },
+            onClick = {
+                onDismiss()
+                onEdit()
+            },
+            leadingIcon = {
+                Icon(Icons.Default.Edit, null)
+            }
+        )
+        DropdownMenuItem(
+            text = { Text("Удалить") },
+            onClick = {
+                onDismiss()
+                onDelete()
+            },
+            leadingIcon = {
+                Icon(Icons.Default.Delete, null)
+            }
+        )
+    }
+}
+
 
 @Composable
 fun MessageBox(
@@ -156,42 +211,7 @@ fun MessageBox(
             }
         }
 
-        DropdownMenu(
-            expanded = showMenu,
-            onDismissRequest = { showMenu = false },
-            modifier = Modifier.background(MaterialTheme.colorScheme.surface)
-        ) {
-            DropdownMenuItem(
-                text = { Text("Копировать текст") },
-                onClick = {
-                    showMenu = false
-                    context.copyToClipboard(text)
-                },
-                leadingIcon = {
-                    Icon(Icons.Default.ContentCopy, null)
-                }
-            )
-            DropdownMenuItem(
-                text = { Text("Изменить") },
-                onClick = {
-                    showMenu = false
-                    onEdit()
-                },
-                leadingIcon = {
-                    Icon(Icons.Default.Edit, null)
-                }
-            )
-            DropdownMenuItem(
-                text = { Text("Удалить") },
-                onClick = {
-                    showMenu = false
-                    onDelete()
-                },
-                leadingIcon = {
-                    Icon(Icons.Default.Delete, null)
-                }
-            )
-        }
+        MessageMenu(showMenu, { showMenu = false }, onDelete, onEdit, text, context)
     }
 }
 
@@ -202,10 +222,10 @@ fun SystemMessageBox(text: String, modifier: Modifier = Modifier) {
         Surface(
             shape = RoundedCornerShape(percent = 50), // Радиус скругления
             color = MaterialTheme.colorScheme.surfaceContainer.copy(alpha = 0.5f), // Цвет фона
-            modifier = modifier.padding(bottom = 16.dp, top = 8.dp)
+            modifier = modifier.padding(bottom = 8.dp)
         ) {
-            Box {
-                Text(text = text)
+            Box(Modifier.padding(12.dp, 4.dp)) {
+                Text(text = text, style = MaterialTheme.typography.bodySmall)
             }
         }
     }
@@ -214,8 +234,16 @@ fun SystemMessageBox(text: String, modifier: Modifier = Modifier) {
 
 
 @Composable
-fun TodoItemBox(text: String, modifier: Modifier = Modifier, checked: Boolean = false) {
-
+fun TodoItemBox(
+    text: String,
+    modifier: Modifier = Modifier,
+    checked: Boolean = false,
+    onTap: () -> Unit,
+    onDelete: () -> Unit,
+    onEdit: () -> Unit,
+) {
+    var showMenu by remember { mutableStateOf(false) }
+    val context = LocalContext.current
 
     val bgColor by animateColorAsState(
         targetValue = if (checked)
@@ -230,28 +258,143 @@ fun TodoItemBox(text: String, modifier: Modifier = Modifier, checked: Boolean = 
         shape = RoundedCornerShape(12.dp), // Радиус скругления
         color = bgColor,
         modifier = Modifier.clip(RoundedCornerShape(12.dp))
-            .then(modifier)
             .fillMaxWidth()
-    ) {
-        Row(
-            modifier = Modifier.padding(12.dp),
-            verticalAlignment = Alignment.Top
-        ) {
-            val vector =
-                if (checked) Icons.Default.CheckBox
-                else Icons.Outlined.CheckBox
-
-            Icon(
-                vector,
-                contentDescription = null,
+            .combinedClickable(
+                interactionSource = remember { MutableInteractionSource() },
+                indication = ripple(bounded = true),
+                onClick = onTap,
+                onLongClick = {
+                    showMenu = true
+                }
             )
-            Box(modifier = Modifier.padding(start = 12.dp)) {
-                Text(text = text)
+            .then(modifier)
+    ) {
+        Column {
+            Row(
+                modifier = Modifier.padding(12.dp),
+                verticalAlignment = Alignment.Top
+            ) {
+                val vector =
+                    if (checked) Icons.Default.CheckBox
+                    else Icons.Outlined.CheckBox
+
+                Icon(
+                    vector,
+                    contentDescription = null,
+                )
+                Box(modifier = Modifier.padding(start = 12.dp)) {
+                    Text(text = text)
+                }
+            }
+
+            MessageMenu(showMenu, { showMenu = false }, onDelete, onEdit, text, context)
+        }
+
+    }
+
+}
+
+
+@Composable
+fun TaskStats(
+    done: Int,
+    total: Int,
+    modifier: Modifier = Modifier
+) {
+    Surface(
+        Modifier
+            .padding(bottom = 16.dp)
+            .clip(RoundedCornerShape(8.dp))
+            .padding(16.dp),
+        shape = RoundedCornerShape(8.dp),
+        color = MaterialTheme.colorScheme.surfaceContainer
+    ) {
+        Column(
+            modifier = Modifier
+                .clip(RoundedCornerShape(16.dp))
+                .fillMaxWidth(),
+            horizontalAlignment = Alignment.CenterHorizontally
+        ) {
+            Text(
+                "Статистика", modifier = Modifier.padding(top = 16.dp),
+                style = MaterialTheme.typography.headlineSmall,
+                fontWeight = FontWeight.Bold
+            )
+            Row(Modifier.padding(16.dp).fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
+                Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                    Text(
+                        "Создано",
+                        style = MaterialTheme.typography.bodySmall,
+                        modifier = Modifier.padding(bottom = 4.dp)
+                    )
+                    Text(
+                        total.toString(),
+                        style = MaterialTheme.typography.bodyLarge,
+                        fontWeight = FontWeight.Bold
+                    )
+                }
+                Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                    Text(
+                        "Выполнено",
+                        style = MaterialTheme.typography.bodySmall,
+                        modifier = Modifier.padding(bottom = 4.dp)
+                    )
+                    Text(
+                        done.toString(),
+                        style = MaterialTheme.typography.bodyLarge,
+                        fontWeight = FontWeight.Bold
+                    )
+                }
+                Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                    Text(
+                        "Осталось",
+                        style = MaterialTheme.typography.bodySmall,
+                        modifier = Modifier.padding(bottom = 4.dp)
+                    )
+                    Text(
+                        (total - done).toString(),
+                        style = MaterialTheme.typography.bodyLarge,
+                        fontWeight = FontWeight.Bold
+                    )
+                }
             }
         }
     }
 
 }
+
+
+
+
+@Composable
+fun ExpandingBottomBar(
+    modifier: Modifier = Modifier,
+    content: @Composable RowScope.() -> Unit
+) {
+    Surface(
+        tonalElevation = 8.dp,
+        modifier = modifier
+            .fillMaxWidth()
+            .wrapContentHeight() // ← растягиваем по содержимому
+    ) {
+        Row(
+            modifier = Modifier
+                .padding(12.dp, 8.dp),
+            verticalAlignment = Alignment.CenterVertically,
+            content = content
+        )
+    }
+}
+
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+fun topBarColors(): TopAppBarColors {
+    return TopAppBarDefaults.topAppBarColors(
+        containerColor = MaterialTheme.colorScheme.surfaceContainer,
+        titleContentColor = MaterialTheme.colorScheme.onSurface,
+    )
+}
+
 
 
 fun Bitmap.resizeToCover(targetWidth: Int, targetHeight: Int): Bitmap {

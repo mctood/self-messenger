@@ -12,13 +12,20 @@ android {
         applicationId = "com.rogatka.introgram"
         minSdk = 26
         targetSdk = 36
-        versionCode = 5
-        versionName = "1.4"
+        versionCode = 6
+        versionName = "1.5"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
     }
 
     buildTypes {
+        debug {
+            applicationIdSuffix = ".debug"
+            manifestPlaceholders.apply {
+                put("appIcon", "@mipmap/ic_launcher_debug")
+                put("appIconRound", "@mipmap/ic_launcher_debug_round")
+            }
+        }
         release {
             isMinifyEnabled = false
             proguardFiles(
