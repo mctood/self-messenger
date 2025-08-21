@@ -1,5 +1,6 @@
 package com.rogatka.introgram.nav
 
+import android.util.Log
 import androidx.compose.animation.animateColorAsState
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.background
@@ -20,46 +21,45 @@ import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material.icons.filled.Folder
 import androidx.compose.material.icons.filled.Info
 import androidx.compose.material.icons.filled.Menu
+import androidx.compose.material.icons.filled.RemoveRedEye
 import androidx.compose.material.icons.filled.Search
 import androidx.compose.material3.*
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
+import androidx.compose.runtime.toMutableStateList
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.LocalContext
-import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
-import androidx.compose.ui.unit.sp
 import androidx.navigation.NavController
 import com.rogatka.introgram.modals.ConfirmFolderDeleteModal
 import com.rogatka.introgram.modals.NewFolderModal
 import com.rogatka.introgram.Chat
-import com.rogatka.introgram.ChatAvatar
+import com.rogatka.introgram.ChatItem
 import com.rogatka.introgram.ChatTypes
 import com.rogatka.introgram.Folder
-import com.rogatka.introgram.Message
 import com.rogatka.introgram.SharedContentHolder
 import com.rogatka.introgram.TaskStats
 import com.rogatka.introgram.addFolder
 import com.rogatka.introgram.countStats
-import com.rogatka.introgram.currentDateToString
 import com.rogatka.introgram.deleteFolder
-import com.rogatka.introgram.getAllChatMessages
 import com.rogatka.introgram.getAllChats
 import com.rogatka.introgram.getAllFolders
+import com.rogatka.introgram.getSettings
 import com.rogatka.introgram.modals.AboutModal
 import com.rogatka.introgram.moveChatToFolder
-import com.rogatka.introgram.newMessage
 import com.rogatka.introgram.randomUID
+import com.rogatka.introgram.setSetting
 import com.rogatka.introgram.topBarColors
 
 
@@ -107,13 +107,36 @@ fun MainScreen(navController: NavController, folder: Int = 0) {
     val context = LocalContext.current
     val scrollBehavior = TopAppBarDefaults.pinnedScrollBehavior(rememberTopAppBarState())
     val folders: List<Folder> = remember { getAllFolders(context) }
+
+
+    var showAllChatsFolder by remember {mutableStateOf(getSettings(context).showAllFolders)}
+
     val allFolderIds = remember {
-        listOf(-1, 0) + folders.map { it.id }
+        if (showAllChatsFolder)
+            (listOf(-1, 0) + folders.map { it.id }).toMutableStateList()
+        else
+            (listOf(-1) + folders.map { it.id }).toMutableStateList()
     }
+
     var folderIndex by rememberSaveable {
-        mutableIntStateOf(allFolderIds.indexOf(folder))
+        mutableIntStateOf(
+            allFolderIds.indexOf(
+                if (showAllChatsFolder) folder
+                else {
+                    if (folder == 0) {
+                        if (folders.isNotEmpty()) {
+                            folders[0].id
+                        }
+                        else -1
+                    }
+                    else folder
+                }
+            )
+        )
     }
-    var folderId by rememberSaveable { mutableIntStateOf(folder) }
+
+    var folderId by rememberSaveable { mutableIntStateOf(allFolderIds[folderIndex]) }
+
     val chats: List<Chat> = remember(folderId) {
         if (folderId == -1) {
             getAllChats(context).filter { it.type == ChatTypes.TODO }
@@ -125,6 +148,7 @@ fun MainScreen(navController: NavController, folder: Int = 0) {
     var showNewFolderDialog by remember { mutableStateOf(false) }
     var showDeleteFolderDialog by remember { mutableStateOf(false) }
     var showAboutModal by remember { mutableStateOf(false) }
+
 
     /** MODALS **/
 
@@ -167,18 +191,34 @@ fun MainScreen(navController: NavController, folder: Int = 0) {
             .pointerInput(Unit) {
                 detectDragGestures(
                     onDragEnd = {
+                        Log.e("Swipe", "Swipe! --------------------------------------------------------")
+                        Log.e("Swipe", "folderId, folderIndex before swipe: $folderId, $folderIndex")
+                        Log.e("Swipe", "allFolderIds before swipe: ${allFolderIds.joinToString(", ")}")
+
+
                         if (totalDragX > 100) {
+                            Log.e("Swipe", " ### Swiping right ->")
+
                             if (folderIndex > 0) {
+                                Log.e("Swipe", "folderIndex ($folderIndex) > 0")
                                 folderIndex--
-                                folderId = allFolderIds[folderIndex]
                             }
                         } else if (totalDragX < -100) {
+                            Log.e("Swipe", " ### Swiping left <-")
+
                             if (folderIndex < allFolderIds.lastIndex) {
+                                Log.e("Swipe", "folderIndex ($folderIndex) < allFolderIds.lastIndex (${allFolderIds.lastIndex})")
                                 folderIndex++
-                                folderId = allFolderIds[folderIndex]
                             }
                         }
+
+                        Log.e("Swipe", "Setting folderId to allFolderIds[folderIndex ($folderIndex)] (${allFolderIds[folderIndex]})...")
+                        folderId = allFolderIds[folderIndex]
                         totalDragX = 0f
+
+
+                        Log.e("Swipe", "folderId, folderIndex after swipe: $folderId, $folderIndex")
+                        Log.e("Swipe", "allFolderIds after swipe: ${allFolderIds.joinToString(", ")}")
                     },
                     onDrag = { change, dragAmount ->
                         totalDragX += dragAmount.x
@@ -233,6 +273,53 @@ fun MainScreen(navController: NavController, folder: Int = 0) {
                                     showDeleteFolderDialog = true
                                 })
 
+                            DropdownMenuItem(text = { Text(if (showAllChatsFolder) "Скрыть Все чаты" else "Показать Все чаты") }, leadingIcon = {
+                                Icon(
+                                    Icons.Default.RemoveRedEye, contentDescription = "Переключатель"
+                                )
+                            }, onClick = {
+                                expanded = false
+                                showAllChatsFolder = !showAllChatsFolder
+                                setSetting(context) { it.apply { this.showAllFolders = showAllChatsFolder } }
+                                Log.e("Click", "Clicked! --------------------------------------------------------")
+                                if (!showAllChatsFolder) {
+                                    Log.e("Status", " ### Not show all chats folder")
+
+                                    Log.e("allFolderIds", "allFolderIds at start: ${allFolderIds.joinToString(", ")}")
+                                    allFolderIds.remove(0)
+                                    Log.e("allFolderIds", "allFolderIds after zero deletion: ${allFolderIds.joinToString(", ")}")
+
+                                    if (folderId == 0) {
+                                        Log.e("Status", "Folder id == 0!")
+                                        if (folders.isNotEmpty()) {
+                                            Log.e("Status", "Folders is not empty!")
+                                            Log.e("Status", "folderId, folderIndex before reassignment: $folderId, $folderIndex")
+                                            folderId = folders[0].id
+                                            folderIndex = allFolderIds.indexOf(folderId)
+                                            Log.e("Status", "folderId, folderIndex after reassignment: $folderId, $folderIndex")
+                                        } else {
+                                            Log.e("Status", "Folders IS empty!")
+                                            Log.e("Status", "folderId, folderIndex before reassignment: $folderId, $folderIndex")
+                                            folderId = -1
+                                            folderIndex = 0
+                                            Log.e("Status", "folderId, folderIndex after reassignment: $folderId, $folderIndex")
+                                        }
+                                    }
+                                } else {
+                                    Log.e("Status", " ### Show all chats folder")
+                                    Log.e("allFolderIds", "allFolderIds at start: ${allFolderIds.joinToString(", ")}")
+                                    if (!allFolderIds.contains(0)) {
+                                        Log.e("allFolderIds", "not contains zero, adding...")
+                                        allFolderIds.add(1, 0)
+                                    }
+                                    Log.e("allFolderIds", "allFolderIds after the `if`: ${allFolderIds.joinToString(", ")}")
+
+                                }
+                                Log.e("Status", "folderId, folderIndex before main reassignment: $folderId, $folderIndex")
+                                folderIndex = allFolderIds.indexOf(folderId)
+                                Log.e("Status", "folderId, folderIndex after main reassignment: $folderId, $folderIndex")
+                            })
+
                             HorizontalDivider()
                             DropdownMenuItem(text = { Text("О программе") }, leadingIcon = {
                                 Icon(
@@ -245,7 +332,7 @@ fun MainScreen(navController: NavController, folder: Int = 0) {
                         }
                     },
                     actions = {
-                        IconButton(onClick = { /* do something */ }) {
+                        IconButton(onClick = { navController.navigate("search/${folderId}") }) {
                             Icon(
                                 imageVector = Icons.Default.Search,
                                 contentDescription = "Search"
@@ -269,7 +356,7 @@ fun MainScreen(navController: NavController, folder: Int = 0) {
                         Icon(Icons.Filled.Checklist, contentDescription = "1", modifier = Modifier.size(24.dp))
                     }
 
-                    TopBarFolder(selected = folderId ==  0, onClick = {
+                    if (showAllChatsFolder) TopBarFolder(selected = folderId ==  0, onClick = {
                         folderId = 0
                         folderIndex = allFolderIds.indexOf(folderId)
                     }) {
@@ -334,54 +421,13 @@ fun MainScreen(navController: NavController, folder: Int = 0) {
 
 
             chats.forEach { chat ->
-                val allMessages = getAllChatMessages(context, chat.id)
-
-                val lastMessage = if (allMessages.isNullOrEmpty()) {
-                    "Тут ничего нет!"
-                } else {
-                    allMessages[0].content
-                }
-                Box(
-                    modifier = Modifier
-                        .clickable {
-                            if (shareMode) {
-                                newMessage(
-                                    context = context,
-                                    chat = chat,
-                                    message = Message(
-                                        id = randomUID(),
-                                        content = sharedText!!,
-                                        dateTime = currentDateToString()
-                                    )
-                                )
-                                shareMode = false
-                                SharedContentHolder.sharedText = null
-                            }
-                            navController.navigate("chat/${chat.id}/${folderId}")
-                        }
-                ) {
-                    Row(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .padding(8.dp),
-                        verticalAlignment = Alignment.CenterVertically,
-                    ) {
-                        ChatAvatar(filename = chat.imagePath, size = 60.dp, todo = chat.type == ChatTypes.TODO)
-                        Column(modifier = Modifier.padding(start = 10.dp)) {
-                            Text(
-                                chat.name,
-                                fontWeight = FontWeight.Bold,
-                                fontSize = 16.sp
-                            )
-                            Text(
-                                lastMessage,
-                                overflow = TextOverflow.Ellipsis,
-                                maxLines = 1,
-                                style = MaterialTheme.typography.bodySmall
-                            )
-                        }
-                    }
-                }
+                ChatItem(
+                    chat = chat,
+                    shareMode = shareMode,
+                    sharedText = sharedText,
+                    navController = navController,
+                    folderId = folderId
+                )
             }
         }
     }

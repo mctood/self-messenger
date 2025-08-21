@@ -17,6 +17,9 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
+import androidx.core.content.pm.ShortcutInfoCompat
+import androidx.core.content.pm.ShortcutManagerCompat
+import androidx.core.graphics.drawable.IconCompat
 import androidx.navigation.NavType
 import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
@@ -25,6 +28,7 @@ import androidx.navigation.navArgument
 import com.rogatka.introgram.nav.ChatScreen
 import com.rogatka.introgram.nav.DetailsScreen
 import com.rogatka.introgram.nav.MainScreen
+import com.rogatka.introgram.nav.SearchScreen
 import com.rogatka.introgram.ui.theme.MyApplicationTheme
 
 class MainActivity : ComponentActivity() {
@@ -38,6 +42,29 @@ class MainActivity : ComponentActivity() {
             WindowManager.LayoutParams.FLAG_HARDWARE_ACCELERATED
         )
         super.onCreate(savedInstanceState)
+
+
+        val context = this
+        ShortcutManagerCompat.setDynamicShortcuts(context, listOf(
+            ShortcutInfoCompat.Builder(context, "share")
+                .setShortLabel("Share")
+                .setLongLabel("Share")
+                .setIntent(
+                    Intent(context, MainActivity::class.java).apply {
+                        action = Intent.ACTION_VIEW
+                        putExtra("chat_id", 2)
+                    }
+                )
+                .setIcon(IconCompat.createWithResource(context, R.drawable.ic_launcher_foreground))
+                .setLongLived(true)
+                .setCategories(setOf("android.intent.category.DEFAULT"))
+                .addCapabilityBinding("actions.intent.SHARE")
+                .addCapabilityBinding("actions.intent.SEND")
+                .addCapabilityBinding("actions.intent.SEND_MESSAGE")
+                .build()
+        ))
+
+
 
         enableEdgeToEdge()
         setContent {
@@ -90,6 +117,26 @@ class MainActivity : ComponentActivity() {
                             val id = backStackEntry.arguments?.getInt("id") ?: 0
                             val folder = backStackEntry.arguments?.getInt("folder") ?: 0
                             ChatScreen(id, navController, folder)
+                        }
+
+                        composable(
+                            "search/{folder}",
+                            arguments = listOf(navArgument("folder") { type = NavType.IntType }),
+                            enterTransition = {
+                                slideIntoContainer(
+                                    AnimatedContentTransitionScope.SlideDirection.Left,
+                                    animationSpec = tween(400)
+                                )
+                            },
+                            exitTransition = {
+                                slideOutOfContainer(
+                                    AnimatedContentTransitionScope.SlideDirection.Right,
+                                    animationSpec = tween(400)
+                                )
+                            },
+                        ) { backStackEntry ->
+                            val folder = backStackEntry.arguments?.getInt("folder") ?: 0
+                            SearchScreen(navController, folder)
                         }
                     }
                 }

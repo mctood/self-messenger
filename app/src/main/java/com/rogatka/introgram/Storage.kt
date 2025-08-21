@@ -30,6 +30,8 @@ import java.util.Locale
 val gson = Gson()
 val emptyChats: String = gson.toJson(Chats(chats = mutableListOf()))
 val emptyFolders: String = gson.toJson(Folders(folders = mutableListOf()))
+
+val emptySettings: String = gson.toJson(Settings())
 fun randomUID(): Int {
     return (100000000..999999999).random()
 }
@@ -409,4 +411,21 @@ fun countStats(context: Context): Stats {
         total = total,
         done = done
     )
+}
+
+data class Settings(
+    var showAllFolders: Boolean = true
+)
+
+fun getSettings(context: Context): Settings {
+    val settings: Settings = gson.fromJson(
+        readJsonFromFile(context, "settings.json") ?: emptySettings,
+        Settings::class.java
+    )
+    return settings
+}
+
+fun setSetting(context: Context, lambda: (settings: Settings) -> Settings) {
+    val settings = lambda(getSettings(context))
+    writeJsonToFile(context, "settings.json", gson.toJson(settings))
 }

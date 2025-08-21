@@ -8,6 +8,7 @@ import androidx.compose.animation.animateColorAsState
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.interaction.MutableInteractionSource
@@ -58,10 +59,12 @@ import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.core.graphics.scale
+import androidx.navigation.NavController
 
 
 @Composable
@@ -183,8 +186,10 @@ fun MessageBox(
     text: String,
     time: String,
     modifier: Modifier = Modifier,
-    onDelete: () -> Unit,
-    onEdit: () -> Unit,
+    onDelete: () -> Unit = {},
+    onEdit: () -> Unit = {},
+    inSearch: Boolean = false,
+    onTap: () -> Unit = {}
 ) {
     var showMenu by remember { mutableStateOf(false) }
     val context = LocalContext.current
@@ -192,12 +197,15 @@ fun MessageBox(
     Surface(
         shape = RoundedCornerShape(8.dp, 8.dp, 3.dp, 8.dp), // Радиус скругления
         color = MaterialTheme.colorScheme.surfaceContainer, // Цвет фона
-        modifier = modifier.padding(bottom = 8.dp).pointerInput(Unit) {
-            detectTapGestures(
-                onLongPress = { showMenu = true },
-                onTap = { showMenu = false }
-            )
-        }
+        modifier = modifier.padding(bottom = 8.dp).then(
+            if (inSearch) Modifier.clickable(onClick = onTap)
+            else Modifier.pointerInput(Unit) {
+                detectTapGestures(
+                    onLongPress = { showMenu = true },
+                    onTap = { showMenu = false }
+                )
+            }
+        )
     ) {
         Column(
             modifier = Modifier.padding(12.dp, 12.dp, 12.dp, 4.dp),
@@ -211,14 +219,14 @@ fun MessageBox(
             }
         }
 
-        MessageMenu(showMenu, { showMenu = false }, onDelete, onEdit, text, context)
+        if (!inSearch) MessageMenu(showMenu, { showMenu = false }, onDelete, onEdit, text, context)
     }
 }
 
 
 @Composable
 fun SystemMessageBox(text: String, modifier: Modifier = Modifier) {
-    Box(Modifier.fillMaxWidth(), contentAlignment = Alignment.Center) {
+    Box(Modifier.fillMaxWidth().padding(top = 8.dp), contentAlignment = Alignment.Center) {
         Surface(
             shape = RoundedCornerShape(percent = 50), // Радиус скругления
             color = MaterialTheme.colorScheme.surfaceContainer.copy(alpha = 0.5f), // Цвет фона
@@ -230,6 +238,65 @@ fun SystemMessageBox(text: String, modifier: Modifier = Modifier) {
         }
     }
 
+}
+
+
+@Composable
+fun ChatItem(
+    chat: Chat,
+    shareMode: Boolean,
+    sharedText: String?,
+    navController: NavController,
+    folderId: Int
+) {
+    val context = LocalContext.current
+    val allMessages = getAllChatMessages(context, chat.id)
+
+    val lastMessage = if (allMessages.isNullOrEmpty()) {
+        "Тут ничего нет!"
+    } else {
+        allMessages[0].content
+    }
+    Box(
+        modifier = Modifier
+            .clickable {
+                if (shareMode) {
+                    newMessage(
+                        context = context,
+                        chat = chat,
+                        message = Message(
+                            id = randomUID(),
+                            content = sharedText!!,
+                            dateTime = currentDateToString()
+                        )
+                    )
+                    SharedContentHolder.sharedText = null
+                }
+                navController.navigate("chat/${chat.id}/${folderId}")
+            }
+    ) {
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(8.dp),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            ChatAvatar(filename = chat.imagePath, size = 60.dp, todo = chat.type == ChatTypes.TODO)
+            Column(modifier = Modifier.padding(start = 10.dp)) {
+                Text(
+                    chat.name,
+                    fontWeight = FontWeight.Bold,
+                    fontSize = 16.sp
+                )
+                Text(
+                    lastMessage,
+                    overflow = TextOverflow.Ellipsis,
+                    maxLines = 1,
+                    style = MaterialTheme.typography.bodySmall
+                )
+            }
+        }
+    }
 }
 
 
