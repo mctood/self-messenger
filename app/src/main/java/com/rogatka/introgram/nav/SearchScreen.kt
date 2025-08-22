@@ -1,7 +1,6 @@
 package com.rogatka.introgram.nav
 
 import android.content.Context
-import android.util.Log
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxHeight
@@ -9,6 +8,7 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
@@ -19,6 +19,8 @@ import androidx.compose.material3.TextField
 import androidx.compose.material3.TextFieldDefaults
 import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -32,6 +34,9 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.lifecycle.ViewModel
+import androidx.lifecycle.viewModelScope
+import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.navigation.NavController
 import com.rogatka.introgram.Chat
 import com.rogatka.introgram.ChatItem
@@ -39,35 +44,68 @@ import com.rogatka.introgram.Message
 import com.rogatka.introgram.MessageBox
 import com.rogatka.introgram.getAllChats
 import com.rogatka.introgram.topBarColors
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 import kotlin.collections.mutableListOf
-
 
 data class MessageWithChat(
     val message: Message,
     val chatId: Int
 )
 
+class SearchViewModel : ViewModel() {
+    private val _chats = MutableStateFlow<List<Chat>>(emptyList())
+    val chats: StateFlow<List<Chat>> = _chats.asStateFlow()
 
-fun getSearchResults(
-    context: Context,
-    query: String,
-    messages: MutableList<MessageWithChat>,
-    chats: MutableList<Chat>,
-) {
-    Log.e("Search", "Searching! ----------------------------------------")
-    chats.clear()
-    if (query.isEmpty()) return
+    private val _messages = MutableStateFlow<List<MessageWithChat>>(emptyList())
+    val messages: StateFlow<List<MessageWithChat>> = _messages.asStateFlow()
 
-    val allChats = getAllChats(context)
-    allChats.forEach { chat ->
-        if (chat.name.lowercase().contains(query.lowercase())) {
-            chats.add(chat)
+    val loading = MutableStateFlow(false)
 
-            for (message in chat.messages) {
-                if (message.content.lowercase().contains(query.lowercase())) {
-                    messages.add(MessageWithChat(message, chat.id))
+    private var searchJob: Job? = null
+
+    fun search(query: String, allChats: List<Chat>) {
+        searchJob?.cancel()
+
+        searchJob = viewModelScope.launch(Dispatchers.IO) {
+            if (query.isNotEmpty()) {
+                loading.value = true
+                val filteredChats: MutableList<Chat> = mutableListOf()
+                val filteredMessages: MutableList<MessageWithChat> = mutableListOf()
+
+                allChats.forEach { chat ->
+                    if (chat.name.lowercase().contains(query.lowercase())) {
+                        filteredChats.add(chat)
+                    }
+                    for (message in chat.messages) {
+                        if (message.content.lowercase().contains(query.lowercase())) {
+                            filteredMessages.add(MessageWithChat(message, chat.id))
+                        }
+                    }
                 }
+
+                // Обновляем состояние в основном потоке
+                withContext(Dispatchers.Main) {
+                    _chats.value = filteredChats
+                    _messages.value = filteredMessages
+                }
+                loading.value = false
+            } else {
+                clearResults()
             }
+        }
+    }
+
+    fun clearResults() {
+        searchJob?.cancel()
+        viewModelScope.launch {
+            _chats.value = emptyList()
+            _messages.value = emptyList()
         }
     }
 }
@@ -77,9 +115,22 @@ fun getSearchResults(
 @Composable
 fun SearchScreen(navController: NavController, backFolder: Int) {
     val context = LocalContext.current
+    val viewModel: SearchViewModel = viewModel()
     var query by remember { mutableStateOf("") }
-    val messages = remember { mutableListOf<MessageWithChat>() }
-    val chats = remember { mutableListOf<Chat>() }
+    val allChats = remember { getAllChats(context) }
+
+    val chats by viewModel.chats.collectAsState()
+    val messages by viewModel.messages.collectAsState()
+
+    val loading by viewModel.loading.collectAsState()
+
+    LaunchedEffect(query) {
+        if (query.isNotEmpty()) {
+            viewModel.search(query, allChats)
+        } else {
+            viewModel.clearResults()
+        }
+    }
 
     Scaffold(
         topBar = {
@@ -100,12 +151,17 @@ fun SearchScreen(navController: NavController, backFolder: Int) {
                         )
                     }
                 },
+                actions = {
+                    if (loading) CircularProgressIndicator()
+                }
             )
         }
     ) { paddingValues ->
         if (query.isEmpty()) {
             Column(
-                modifier = Modifier.fillMaxWidth().fillMaxHeight(),
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .fillMaxHeight(),
                 verticalArrangement = Arrangement.Center,
                 horizontalAlignment = Alignment.CenterHorizontally
             ) {
@@ -126,15 +182,7 @@ fun SearchScreen(navController: NavController, backFolder: Int) {
                 modifier = Modifier.fillMaxWidth(),
                 shape = RectangleShape,
                 value = query,
-                onValueChange = {
-                    query = it
-                    getSearchResults(
-                        context = context,
-                        chats = chats,
-                        messages = messages,
-                        query = query
-                    )
-                },
+                onValueChange = { query = it },
                 placeholder = { Text("Введите запрос") },
                 colors = TextFieldDefaults.colors(
                     unfocusedIndicatorColor = Color.Transparent,
@@ -165,7 +213,11 @@ fun SearchScreen(navController: NavController, backFolder: Int) {
                     }
                 }
                 if (messages.isNotEmpty()) {
-                    Column(Modifier.padding(top = 24.dp).fillMaxWidth()) {
+                    Column(
+                        Modifier
+                            .padding(top = 24.dp)
+                            .fillMaxWidth()
+                    ) {
                         Text(
                             "Сообщения (${messages.size})",
                             fontWeight = FontWeight.Bold,
@@ -173,13 +225,18 @@ fun SearchScreen(navController: NavController, backFolder: Int) {
                             modifier = Modifier.padding(16.dp)
                         )
                         messages.forEach { message ->
-                            Column(Modifier.fillMaxWidth().padding(horizontal = 8.dp), horizontalAlignment = Alignment.End) {
-                                MessageBox (
+                            Column(
+                                Modifier
+                                    .fillMaxWidth()
+                                    .padding(horizontal = 8.dp),
+                                horizontalAlignment = Alignment.End
+                            ) {
+                                MessageBox(
                                     text = message.message.content.take(50),
                                     time = message.message.dateTime,
                                     inSearch = true,
-                                    onTap =  {
-                                        navController.navigate("chat/${message.chatId}/${backFolder}")
+                                    onTap = {
+                                        navController.navigate("chat/${message.chatId}/${backFolder}/${message.message.id}")
                                     }
                                 )
                             }

@@ -72,4 +72,5 @@ dependencies {
     implementation("com.google.code.gson:gson:2.13.1")
     implementation("androidx.compose.material:material-icons-extended:1.7.8")
     implementation("androidx.compose.foundation:foundation")
+    implementation("org.jetbrains.kotlinx:kotlinx-coroutines-android:1.10.2")
 }

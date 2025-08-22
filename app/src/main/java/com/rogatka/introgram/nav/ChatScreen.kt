@@ -28,6 +28,7 @@ import androidx.compose.material3.*
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateListOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -86,7 +87,7 @@ import kotlinx.coroutines.withContext
 
 
 @Composable
-fun ChatScreen(chatId: Int, navController: NavController, folderToReturn: Int = 0) {
+fun ChatScreen(chatId: Int, navController: NavController, folderToReturn: Int = 0, message: Int = 0) {
     val context = LocalContext.current
     val chat = getChatByID(context = context, id = chatId)
 
@@ -95,6 +96,7 @@ fun ChatScreen(chatId: Int, navController: NavController, folderToReturn: Int = 
         return
     }
     var chatName by remember {mutableStateOf(chat.name)}
+    var messageMutable by remember {mutableIntStateOf(message)}
     val messages = remember {
         getAllChatMessages(context = context, chatId = chatId)?.toMutableStateList()
             ?: mutableStateListOf()
@@ -115,6 +117,18 @@ fun ChatScreen(chatId: Int, navController: NavController, folderToReturn: Int = 
         context = LocalContext.current,
         filename = backgroundPath.value
     )?.asImageBitmap() ?: ImageBitmap(1, 1)
+
+    LaunchedEffect(messageMutable, messages.size) {
+        if (messageMutable != 0 && messages.isNotEmpty()) {
+            val messageIndex = messages.indexOfFirst { it.id == messageMutable }
+            if (messageIndex != -1) {
+                listState.scrollToItem(
+                    index = messageIndex,
+                    scrollOffset = 0
+                )
+            }
+        }
+    }
 
 
     val pickPhoto =
@@ -247,10 +261,12 @@ fun ChatScreen(chatId: Int, navController: NavController, folderToReturn: Int = 
     var messageText by remember { mutableStateOf("") }
 
     LaunchedEffect(messages.size) {
-        if (messages.isNotEmpty()) {
+        if (messages.isNotEmpty() && messageMutable == 0) {
             coroutineScope.launch {
                 listState.animateScrollToItem(0)
             }
+        } else {
+            messageMutable = 0
         }
     }
 
@@ -447,6 +463,7 @@ fun ChatScreen(chatId: Int, navController: NavController, folderToReturn: Int = 
 
                 if (chat.type == ChatTypes.CLASSIC)
                     LazyColumn(
+                        state = listState,
                         modifier = Modifier
                             .fillMaxSize()
                             .padding(horizontal = 8.dp),
@@ -470,6 +487,7 @@ fun ChatScreen(chatId: Int, navController: NavController, folderToReturn: Int = 
                     }
 
                 if (chat.type == ChatTypes.TODO) LazyColumn(
+                    state = listState,
                     modifier = Modifier
                         .fillMaxSize()
                         .padding(horizontal = 12.dp),

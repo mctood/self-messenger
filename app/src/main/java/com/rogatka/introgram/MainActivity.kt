@@ -96,7 +96,7 @@ class MainActivity : ComponentActivity() {
 
 
                         composable(
-                            "chat/{id}/{folder}",
+                            "chat/{id}/{folder}/{message}",
                             enterTransition = {
                                 slideIntoContainer(
                                     AnimatedContentTransitionScope.SlideDirection.Left,
@@ -111,12 +111,14 @@ class MainActivity : ComponentActivity() {
                             },
                             arguments = listOf(
                                 navArgument("id") { type = NavType.IntType },
-                                navArgument("folder") { type = NavType.IntType }
+                                navArgument("folder") { type = NavType.IntType },
+                                navArgument("message") { type = NavType.IntType }
                             )
                         ) { backStackEntry ->
                             val id = backStackEntry.arguments?.getInt("id") ?: 0
                             val folder = backStackEntry.arguments?.getInt("folder") ?: 0
-                            ChatScreen(id, navController, folder)
+                            val message = backStackEntry.arguments?.getInt("message") ?: 0
+                            ChatScreen(id, navController, folder, message)
                         }
 
                         composable(

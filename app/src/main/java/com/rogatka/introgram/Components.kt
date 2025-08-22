@@ -272,7 +272,7 @@ fun ChatItem(
                     )
                     SharedContentHolder.sharedText = null
                 }
-                navController.navigate("chat/${chat.id}/${folderId}")
+                navController.navigate("chat/${chat.id}/${folderId}/0")
             }
     ) {
         Row(
